@@ -12,10 +12,11 @@ st.set_page_config(layout="wide")
 
 # --- Configuration & Constants ---
 DS_COL = [
-    "MolWt", "NumHDonors", "NumHAcceptors", "TPSA", "NumRotatableBonds", "MolLogP",
+    "mol_wt", "NumHdonors", "NumHAcceptors", "TPSA", "NumRotatableBonds", "MolLogP",
     "FpDensityMorgan1", "NumAromaticRings", "FractionCSP3", "NumAliphaticRings",
     "FpDensityMorgan2", "HeavyAtomMolWt"
 ]
+
 
 
 # --- Model Loading (Cached) ---
@@ -187,6 +188,7 @@ if st.session_state.all_results:
     download_excel_button(results["df_display"], "📥 Download All Predictions", "predictions.xlsx", "all")
     download_excel_button(results["df_high"], "📥 High Chance Molecules", "high_chances.xlsx", "high")
     download_excel_button(results["df_active"], "📥 Active SMILES Only", "active_smiles.xlsx", "active")
+
 
 
 
