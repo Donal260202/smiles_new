@@ -24,7 +24,7 @@ DS_COL = [
 def load_models_cached():
     return {
         "model": joblib.load("hybrid_model.pkl"),
-        "absorption_model": joblib.load("absorption_hybrid_Caco2_Wang.pkl"),
+        "absorption_model": joblib.load("Absorption_Hybrid_CACO2WANG.pkl"),
         "metabolism_model": joblib.load("Metabolism_Hybrid_CYP2D6.pkl"),
     }
 
@@ -188,6 +188,7 @@ if st.session_state.all_results:
     download_excel_button(results["df_display"], "📥 Download All Predictions", "predictions.xlsx", "all")
     download_excel_button(results["df_high"], "📥 High Chance Molecules", "high_chances.xlsx", "high")
     download_excel_button(results["df_active"], "📥 Active SMILES Only", "active_smiles.xlsx", "active")
+
 
 
 
