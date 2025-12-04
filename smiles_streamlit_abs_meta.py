@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+import tensorflow as tf
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdMolDescriptors
 import plotly.express as px
@@ -17,15 +18,24 @@ DS_COL = [
     "FpDensityMorgan2", "HeavyAtomMolWt"
 ]
 
-
+TOX_MODELS_PATHS = [
+    "tox_model_1.h5",
+    "tox_model_2.h5",
+    "tox_model_3.h5",
+    "tox_model_4.h5",
+    "tox_model_5.h5"
+]
 
 # --- Model Loading (Cached) ---
 @st.cache_resource
 def load_models_cached():
+    tox_models = [tf.keras.models.load_model(path) for path in TOX_MODELS_PATHS]
+
     return {
         "model": joblib.load("hybrid_model.pkl"),
         "absorption_model": joblib.load("Absorption_Hybrid_CACO2WANG.pkl"),
         "metabolism_model": joblib.load("Metabolism_Hybrid_CYP2D6.pkl"),
+        "tox_models": tox_models
     }
 
 MODELS = load_models_cached()
@@ -68,19 +78,36 @@ def perform_full_processing(df_input):
     with st.spinner("🤖 Making predictions..."):
         X_pred = df[DS_COL].astype(float)
 
+        # ✅ MAIN MODEL
         df["Activity_Prediction"] = MODELS["model"].predict(X_pred)
         y_proba = MODELS["model"].predict_proba(X_pred)
         df["Probability"] = np.max(y_proba, axis=1)
 
+        # ✅ ABSORPTION & METABOLISM
         df["Absorption"] = MODELS["absorption_model"].predict(X_pred)
         df["Metabolism"] = MODELS["metabolism_model"].predict(X_pred)
 
+        # ✅ TOXICITY ENSEMBLE
+        tox_probs = []
+
+        for model in MODELS["tox_models"]:
+            probs = model.predict(X_pred, verbose=0).ravel()  # NN output probability
+            tox_probs.append(probs)
+
+        tox_probs = np.array(tox_probs)
+        df["Toxicity_Probability"] = np.mean(tox_probs, axis=0)
+        df["Toxicity"] = (df["Toxicity_Probability"] >= 0.5).astype(int)
+        df["Toxicity_label"] = df["Toxicity"].apply(
+            lambda x: "Toxic" if x == 1 else "Non-Toxic"
+        )
+
+    # --- Interpret Activity ---
     df["Concentration"] = df["Activity_Prediction"].apply(
         lambda x: "1 and 10 μM" if x == 2 else ("10 μM" if x == 1 else "Inactive")
     )
 
     df["Chances"] = df.apply(
-        lambda row: 
+        lambda row:
         "Inactive" if row["Activity_Prediction"] == 0 else
         "High Chances" if row["Probability"] >= 0.75 else
         "Low Chances",
@@ -92,14 +119,14 @@ def perform_full_processing(df_input):
     )
 
     results = {"main_df": df}
-
     results["df_high"] = df[df["Chances"] == "High Chances"]
     results["df_active"] = df[df["Activity_Prediction"] != 0]
 
-    # --- Preserve all input columns + predictions ---
+    # --- Display Columns ---
     prediction_cols = [
         "Activity_Prediction", "Probability", "Concentration",
-        "Chances", "Absorption", "Metabolism_label"
+        "Chances", "Absorption", "Metabolism_label",
+        "Toxicity_label", "Toxicity_Probability"
     ]
 
     original_input_cols = [col for col in df_input.columns if col != "smiles"]
@@ -128,7 +155,7 @@ def download_excel_button(df_to_download, label, filename, key_suffix):
 
 
 # --- Streamlit App UI ---
-st.title("🧪 SMILES-Based Activity, Absorption & Metabolism Predictor")
+st.title("🧪 SMILES-Based Activity, ADME & Toxicity Predictor")
 st.markdown("Upload an Excel file with **smiles** column.")
 
 if "processed_file_id" not in st.session_state:
@@ -181,6 +208,11 @@ if st.session_state.all_results:
         fig = px.pie(summary, names="Class", values="Count", title="Activity Distribution")
         st.plotly_chart(fig, use_container_width=True)
 
+    st.subheader("☣️ Toxicity Summary")
+    tox_summary = df["Toxicity_label"].value_counts().reset_index()
+    tox_summary.columns = ["Toxicity", "Count"]
+    st.table(tox_summary)
+
     st.subheader("🧾 Detailed Results (Top 20)")
     st.dataframe(results["df_display"].head(20))
 
@@ -188,8 +220,3 @@ if st.session_state.all_results:
     download_excel_button(results["df_display"], "📥 Download All Predictions", "predictions.xlsx", "all")
     download_excel_button(results["df_high"], "📥 High Chance Molecules", "high_chances.xlsx", "high")
     download_excel_button(results["df_active"], "📥 Active SMILES Only", "active_smiles.xlsx", "active")
-
-
-
-
-
